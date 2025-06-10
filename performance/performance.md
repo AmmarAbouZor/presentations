@@ -3,7 +3,7 @@ title: Performance Optmizations in Rust.
 ---
 
 Optimize what matters:
-----
+====
 
 <!-- alignment: center -->
 
@@ -13,7 +13,7 @@ Performance Optimizations requires efforts and times, therefore it's crucial to 
 
 <!-- new_line -->
 
-## Example
+# Example
 
 <!-- new_lines: 2 -->
 
@@ -44,7 +44,7 @@ fn run(config_path: &Path) {
 <!-- end_slide -->
 
 Profilers:
-----
+====
 
 <!-- alignment: center -->
 
@@ -73,7 +73,7 @@ Profilers help us analyze application performance:
 <!-- end_slide -->
 
 Benchmarking
-----
+====
 <!-- alignment: center -->
 
 # Always Measure!
@@ -96,8 +96,8 @@ Since no one can fully predict the outcome of this complex chain, our assumption
 
 <!-- end_slide -->
 
-Compiler Optimizations I
-----
+Compiler Optimizations
+====
 <!-- alignment: center -->
 
 # Give the compiler all available infos:
@@ -142,8 +142,8 @@ fn to_mytype(text: &str) -> MyType {
 
 <!-- end_slide -->
 
-Compiler Optimizations II
-----
+Compiler Optimizations
+====
 
 <!-- alignment: center -->
 
@@ -176,3 +176,232 @@ fn is_odd_modulo(n: i32) -> bool {
 }
 ```
 <!-- end_slide -->
+
+Understanding Memory 
+====
+
+<!-- alignment: center -->
+
+It's important to think about how your code uses memory at runtime. This understanding helps you prevent unnecessary memory allocations and find ways to optimize the code by avoiding them where possible.
+
+<!-- pause -->
+
+<!-- new_lines: 1 -->
+# Show case: Memory Use When Collecting a Vector
+<!-- new_lines: 1 -->
+
+Here, we'll look at the memory allocations that happen when you call `collect::<Vec<_>>()` on an iterator. To demonstrate this, we'll write a simple memory allocator that prints a message every time the vector needs more memory.
+<!-- new_lines: 1 -->
+
+
+<!-- column_layout: [1, 14, 14, 1] -->
+
+
+<!-- column: 1 -->
+```rust
+use std::{
+    alloc::{GlobalAlloc, Layout, System},
+    hint::black_box,
+};
+
+static mut COUNTER: usize = 0;
+
+struct MyAllocator;
+
+// Implement a wrapper around System memory allocator 
+// which counts how many times memory has been alloc
+// Function has been called.
+unsafe impl GlobalAlloc for MyAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        unsafe {
+            COUNTER += 1;
+            System.alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static GLOBAL: MyAllocator = MyAllocator;
+```
+
+<!-- column: 2 -->
+```rust
+
+fn main() {
+    // Provide iterator without known length at compile time.
+    let iter = (0..=16).filter(|n| *n >= black_box(0));
+
+    // Call collect keeping track on memory alloc calls 
+    // before and after
+    let count_start = unsafe { COUNTER };
+    let _vec: Vec<_> = iter.collect();
+    let count_end = unsafe { COUNTER };
+
+    println!("Before Collect. Alloc Count: {count_start}");
+    println!("After Collect. Alloc Count: {count_end}");
+}
+```
+
+<!-- pause -->
+
+<!-- new_lines: 2 -->
+### Output:
+<!-- new_lines: 2 -->
+
+```
+Before Collect. Alloc Count: 0           
+After Collect. Alloc Count: 4
+```
+
+<!-- end_slide -->
+
+Avoid Collect
+====
+
+<!-- alignment: center -->
+Here is a demonstration of some of the common pattern of misusing collect.
+
+
+<!-- new_lines: 1 -->
+# Is Iterator Empty
+<!-- new_lines: 1 -->
+
+```rust
+// Allocate the whole iterator to know if it's empty
+fn is_empty_bad<T>(iter: impl Iterator<Item = T>) -> bool {
+    let vec: Vec<T> = iter.collect();
+    vec.len() > 0
+}
+```
+<!-- pause -->
+<!-- new_lines: 1 -->
+
+```rust
+// No allocation + No consumption of the iterator.
+fn is_empty_good<T>(iter: impl Iterator<Item = T>) -> bool {
+    iter.peekable().peek().is_some()
+}
+```
+<!-- pause -->
+
+<!-- new_lines: 1 -->
+# Check Third Item
+<!-- new_lines: 1 -->
+
+```rust
+// Allocate the whole iterator to check the value of third element.
+fn is_third_positive_bad(iter: impl Iterator<Item = i32>) -> bool {
+    let vec: Vec<_> = iter.collect();
+    vec.get(3).is_some_and(|num| num.is_positive())
+}
+```
+<!-- pause -->
+<!-- new_lines: 1 -->
+
+```rust
+// No allocation
+fn is_third_positive_good(mut iter: impl Iterator<Item = i32>) -> bool {
+    iter.nth(3).is_some_and(|num| num.is_positive())
+}
+```
+
+<!-- end_slide -->
+
+Avoid Collect II
+====
+<!-- alignment: center -->
+
+<!-- new_lines: 1 -->
+# Favor returning iterator over vector.
+<!-- new_lines: 1 -->
+
+```rust
+// Unnecessary memory allocation.
+fn postive_items_bad(nums: &[i32]) -> Vec<i32> {
+    nums.iter()
+        .filter_map(|num| num.is_positive().then_some(*num))
+        .collect()
+}
+```
+<!-- pause -->
+<!-- new_lines: 1 -->
+
+```rust
+// No memory allocation. Caller can collect if needed.
+fn postive_items_good(nums: &[i32]) -> impl Iterator<Item = i32> {
+    nums.iter()
+        .filter_map(|num| num.is_positive().then_some(*num))
+}
+```
+
+<!-- end_slide -->
+
+Reuse Memory
+====
+<!-- alignment: center -->
+A common performance pitfall, especially in loops, is repeatedly allocating new memory for tasks. A much more efficient pattern is to reuse a single buffer. By creating a collection like a String or Vec once outside the loop, and then simply clearing it on each iteration, you can avoid the high cost of repeated memory allocations.
+
+<!-- pause -->
+
+<!-- column_layout: [1, 14, 14, 1] -->
+
+<!-- column: 1 -->
+
+<!-- new_lines: 1 -->
+# Repeated Allocation:
+<!-- new_lines: 1 -->
+```rust
+// *** External Functions ***
+
+fn get_items() -> impl Iterator<Item = i32> {
+    (0..1000).into_iter()
+}
+
+fn process_data(nums: &[i32]) {
+    // ...
+}
+
+// *** Our implementation ***
+fn process(limit: usize) {
+    for _ in 0..limit {
+        // Allocation on each loop.
+        let items: Vec<_> = get_items().collect();
+        process_data(&items);
+    }
+}
+```
+
+<!-- pause -->
+
+<!-- column: 2 -->
+
+<!-- new_lines: 1 -->
+# Memory Reuse:
+<!-- new_lines: 1 -->
+```rust
+// *** External Functions ***
+
+fn get_items() -> impl Iterator<Item = i32> {
+    (0..1000).into_iter()
+}
+
+fn process_data(nums: &[i32]) {
+    // ...
+}
+
+// *** Our implementation ***
+fn process_optimized(limit: usize) {
+    let mut buffer = Vec::new();
+    for _ in 0..limit {
+        // Clearing the vector won't reset its capacity.
+        buffer.clear();
+        buffer.extend(get_items());
+
+        process_data(&buffer);
+    }
+}
+```
