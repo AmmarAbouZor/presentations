@@ -294,7 +294,7 @@ fn is_empty_good<T>(iter: impl Iterator<Item = T>) -> bool {
 // Allocate the whole iterator to check the value of third element.
 fn is_third_positive_bad(iter: impl Iterator<Item = i32>) -> bool {
     let vec: Vec<_> = iter.collect();
-    vec.get(3).is_some_and(|num| num.is_positive())
+    vec.get(2).is_some_and(|num| num.is_positive())
 }
 ```
 <!-- pause -->
@@ -303,7 +303,7 @@ fn is_third_positive_bad(iter: impl Iterator<Item = i32>) -> bool {
 ```rust
 // No allocation
 fn is_third_positive_good(mut iter: impl Iterator<Item = i32>) -> bool {
-    iter.nth(3).is_some_and(|num| num.is_positive())
+    iter.nth(2).is_some_and(|num| num.is_positive())
 }
 ```
 
@@ -424,4 +424,147 @@ fn process_optimized(limit: usize) {
         process_data(&buffer);
     }
 }
+```
+
+<!-- end_slide -->
+
+Vector::Remove() Overhead
+====
+<!-- alignment: center -->
+
+It's important to understand the performance overhead caused by memory rearrangement in methods on standard library collections.
+Specifically, we will demonstrate the overhead of `Vec::remove()`. Removing an item from a Vector causes all subsequent elements to be shifted back one position, which can be very costly in hot loops.
+Here is a illustration to the process of remove.
+
+<!-- new_lines: 1 -->
+# Initial State
+
+```md
+
+index: 0   1   2   3   4   5
+      ┌───┬───┬───┬───┬───┬───┐
+value:│ 10│ 20│ 30│ 40│ 50│ 60│
+      └───┴───┴───┴───┴───┴───┘
+
+```
+
+<!-- new_lines: 1 -->
+# Vec::remove(v, 2)
+```md
+
+      // Step 2: Shift all subsequent elements left
+      //         <--- <--- <---
+      ┌───┬───┬───┬───┬───┬───┐
+value:│ 10│ 20│   │ 40│ 50│ 60│ // Step 1: Remove element
+      └───┴───┴───┴───┴───┴───┘
+
+```
+
+<!-- new_lines: 1 -->
+# Final State.
+
+```md
+index: 0   1   2   3   4
+      ┌───┬───┬───┬───┬───┐
+value:│ 10│ 20│ 40│ 50│ 60│
+      └───┴───┴───┴───┴───┘
+```
+
+
+We will discuss next how to avoid this overhead.
+
+<!-- end_slide -->
+
+Vector::Swap_remove
+====
+<!-- alignment: center -->
+Swap_Remove method will avoid shifting all the element be replacing the last element of the collection with the removed item
+
+
+<!-- new_lines: 1 -->
+# Vec::swap_remove(v, 2)
+```md
+      // The last element moves to replace the removed one.
+      //        ┌──────────┐
+      //        │          │
+      //        ▼          ▼
+      ┌───┬───┬───┬───┬───┬───┐
+value:│ 10│ 20│ 30│ 40│ 50│ 60│ // `30` is replaced by `60`
+      └───┴───┴───┴───┴───┴───┘
+
+```
+
+<!-- new_lines: 1 -->
+# Final State.
+
+```md
+index: 0   1   2   3   4
+      ┌───┬───┬───┬───┬───┐
+value:│ 10│ 20│ 60│ 40│ 50│
+      └───┴───┴───┴───┴───┘
+```
+
+<!-- end_slide -->
+
+Vector for Stack & VecDeque for Queue
+====
+<!-- alignment: center -->
+While a `Vec` is efficient as a **stack** (last-in, first-out), using it as a **queue** (first-in, first-out) is very slow because it must shift elements when one is removed from the front. For an efficient queue, `VecDeque` is the correct data structure.
+
+A `VecDeque` is a "double-ended queue," designed for fast push and pop operations from both its front and back.
+<!-- new_lines: 1 -->
+
+<!-- column_layout: [1, 14, 14, 1] -->
+
+<!-- column: 1 -->
+# Vector::Remove(0)
+<!-- new_lines: 1 -->
+
+```md
+Initial Vec:
+      ┌───┬───┬───┬───┐
+      │ 10│ 20│ 30│ 40│
+      └───┴───┴───┴───┘
+
+Action `remove(0)`:
+      // Inefficient: All other elements must shift left.
+      //   <--- <--- <---
+      ┌───┬───┬───┬───┐
+      │   │ 20│ 30│ 40│ // `10` is removed, a gap is left.
+      └───┴───┴───┴───┘
+
+Final Vec:
+      ┌───┬───┬───┐
+      │ 20│ 30│ 40│
+      └───┴───┴───┘
+```
+
+<!--pause-->
+
+<!-- column: 2 -->
+
+# VecDeque::pop_front()
+<!-- new_lines: 1 -->
+
+```
+Initial Deque:
+    (start)
+      ▼
+      ┌───┬───┬───┬───┐
+      │ 10│ 20│ 30│ 40│
+      └───┴───┴───┴───┘
+
+Action `pop_front()`:
+      // Efficient: The internal 'start' pointer just moves.
+      // No elements are shifted.
+        (new start)
+          ▼
+      ┌───┬───┬───┬───┐
+      │ 10│ 20│ 30│ 40│
+      └───┴───┴───┴───┘
+
+Final Deque:
+      ┌───┬───┬───┐
+      │ 20│ 30│ 40│
+      └───┴───┴───┘
 ```

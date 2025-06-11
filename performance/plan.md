@@ -10,14 +10,15 @@
 
 * Understanding memory. 
   - Demonstrate what happen on collect function. [DHAT](https://docs.rs/dhat/latest/dhat/) can be useful for memory allocations.
-  - Bit falls where collect is used.
+  - Common mistakes where collect() is used.
   - Reuse memory example
   - Vector. `remove` vs `swap_remove`
+  - VecDeque for queue
 
 * Parallelism:
   - Run same function in parallel with rayon and par_iter()
   - Find pattern where work can be shared between multiple thread. Example: Process -> Validate -> Write.
 
-* Assertion for bound checks.
+* Assertion to avoid bound checks.
 
-* Optimize for branch prediction
+* Optimize for branch prediction in processors.
