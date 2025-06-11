@@ -1,9 +1,12 @@
 use std::{
     alloc::{GlobalAlloc, Layout, System},
+    cell::Cell,
     hint::black_box,
 };
 
-static mut COUNTER: usize = 0;
+thread_local! {
+    static COUNTER: Cell<usize> = Cell::new(0);
+}
 
 struct MyAllocator;
 
@@ -12,7 +15,7 @@ struct MyAllocator;
 unsafe impl GlobalAlloc for MyAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         unsafe {
-            COUNTER += 1;
+            COUNTER.set(COUNTER.get() + 1);
             System.alloc(layout)
         }
     }
@@ -30,9 +33,9 @@ fn main() {
     let iter = (0..=16).filter(|n| *n >= black_box(0));
 
     // Call collect keeping track on memory alloc calls before and after
-    let count_start = unsafe { COUNTER };
+    let count_start = COUNTER.get();
     let _vec: Vec<_> = iter.collect();
-    let count_end = unsafe { COUNTER };
+    let count_end = COUNTER.get();
 
     println!("Before Collect. Alloc Count: {count_start}");
     println!("After Collect. Alloc Count: {count_end}");

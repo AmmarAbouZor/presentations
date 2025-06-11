@@ -193,28 +193,28 @@ It's important to think about how your code uses memory at runtime. This underst
 Here, we'll look at the memory allocations that happen when you call `collect::<Vec<_>>()` on an iterator. To demonstrate this, we'll write a simple memory allocator that prints a message every time the vector needs more memory.
 <!-- new_lines: 1 -->
 
-
 <!-- column_layout: [1, 14, 14, 1] -->
-
 
 <!-- column: 1 -->
 ```rust
 use std::{
     alloc::{GlobalAlloc, Layout, System},
+    cell::Cell,
     hint::black_box,
 };
 
-static mut COUNTER: usize = 0;
+thread_local! {
+    static COUNTER: Cell<usize> = Cell::new(0);
+}
 
 struct MyAllocator;
 
-// Implement a wrapper around System memory allocator 
-// which counts how many times memory has been alloc
-// Function has been called.
+// Implement a wrapper around System memory allocator which counts how many times
+// memory has been allocated.
 unsafe impl GlobalAlloc for MyAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         unsafe {
-            COUNTER += 1;
+            COUNTER.set(COUNTER.get() + 1);
             System.alloc(layout)
         }
     }
@@ -230,16 +230,14 @@ static GLOBAL: MyAllocator = MyAllocator;
 
 <!-- column: 2 -->
 ```rust
-
 fn main() {
     // Provide iterator without known length at compile time.
     let iter = (0..=16).filter(|n| *n >= black_box(0));
 
-    // Call collect keeping track on memory alloc calls 
-    // before and after
-    let count_start = unsafe { COUNTER };
+    // Call collect keeping track on memory alloc calls before and after
+    let count_start = COUNTER.get();
     let _vec: Vec<_> = iter.collect();
-    let count_end = unsafe { COUNTER };
+    let count_end = COUNTER.get();
 
     println!("Before Collect. Alloc Count: {count_start}");
     println!("After Collect. Alloc Count: {count_end}");
@@ -314,6 +312,28 @@ fn is_third_positive_good(mut iter: impl Iterator<Item = i32>) -> bool {
 Avoid Collect II
 ====
 <!-- alignment: center -->
+
+<!-- new_lines: 1 -->
+# Check if iterator contains an element.
+<!-- new_lines: 1 -->
+
+```rust
+// Allocate the whole iterator to know if it contains an item
+fn contain_bad<T: Eq>(iter: impl Iterator<Item = T>, item: T) -> bool {
+    let vec: Vec<T> = iter.collect();
+    vec.contains(&item)
+}
+```
+<!-- pause -->
+<!-- new_lines: 1 -->
+
+```rust
+// No Allocation.
+fn contain_good<T: Eq>(mut iter: impl Iterator<Item = T>, item: T) -> bool {
+    iter.find(|i| i == &item).is_some()
+}
+```
+<!-- pause -->
 
 <!-- new_lines: 1 -->
 # Favor returning iterator over vector.
