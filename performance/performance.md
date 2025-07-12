@@ -101,8 +101,8 @@ Compiler Optimizations
 <!-- alignment: center -->
 
 # Give the compiler all available infos:
-
-The Rust compiler is very good at optimizing at compile time. As a general rule, the more information it has up front, the better its optimizations will be. When we write code that lets the compiler figure things out early, for example by using generics, we give it the chance to create faster and more specific machine code for each exact situation.
+The Rust compiler is very good at optimizing at compile time. As a general rule, the more information it has up front, the better its optimizations will be. When we write code that lets the compiler figure things out early, for example with generics, we give it the chance to create faster and more specific machine code for each exact situation. 
+This approach also provides a forward-looking benefit: your code can gain further performance improvements with each new compiler version without any manual changes!
 
 <!--pause-->
 
@@ -567,4 +567,109 @@ Final Deque:
       ┌───┬───┬───┐
       │ 20│ 30│ 40│
       └───┴───┴───┘
+```
+<!-- end_slide -->
+
+Parallelism I
+====
+
+<!-- alignment: center -->
+
+Modern processors feature multiple cores, and operating systems provide robust support for parallel execution of tasks. Also Rust offers excellent tools like Mutexes and Channels to handle these situations safely.
+
+This section will explore two common patterns where parallelizing code can significantly enhance application performance.
+
+<!-- new_lines: 2 -->
+<!--pause-->
+
+# 1. Parallel Iteration
+
+Applying a process to each item within a collection is a common task. Performing this operation in parallel can have huge impact on performance.
+In Rust, the `rayon` crate makes parallel iteration really simple. You can often achieve parallelism by simply replacing `.iter()` with `.par_iter()`.
+
+<!--pause-->
+<!-- new_lines: 1 -->
+## Example
+
+```rust
+use rayon::prelude::*;
+fn sum_of_squares(input: &[i32]) -> i32 {
+    input.par_iter() // <-- just change that!
+         .map(|&i| i * i)
+         .sum()
+}
+```
+
+<!--pause-->
+<!-- new_lines: 2 -->
+
+## Execution Order and Side Effects
+For the most, parallel iterators in particular are guaranteed to produce the same results as their sequential counterparts. One caveat: If your iterator has side effects (for example, sending methods to other threads through a Rust channel or writing to disk), those side effects may occur in a different order.
+
+<!-- end_slide -->
+
+Parallelism II
+====
+
+<!-- alignment: center -->
+
+# 2. Pipelined Parallelism
+
+Sometimes a process involves multiple steps that run one after the other. This means earlier steps wait for later ones to complete, even if they are ready to go. We can improve this by running each step in its own thread (or task for I/O operations) and passing data between them using **channels**. 
+
+<!-- pause -->
+
+<!-- new_lines: 1 -->
+## Example:
+
+<!-- new_lines: 1 -->
+
+<!-- column_layout: [15, 35] -->
+<!-- column: 0 -->
+
+```rust
+fn load() -> Vec<u8> { //... }
+
+fn process(data: &[u8]) -> String { //... }
+
+fn write_results(results: String) { //... }
+
+fn run_sequential() {
+    let data = load();
+    let results = process(&data);
+    write_results(results);
+}
+```
+<!--pause-->
+
+<!-- column: 1 -->
+
+```rust
+use std::sync::mpsc;
+use std::thread;
+
+fn run_with_channels() {
+    let (load_tx, load_rx) = mpsc::channel::<Vec<u8>>();
+    let (process_tx, process_rx) = mpsc::channel::<String>();
+
+    let process_hanlde = thread::spawn(move || {
+        while let Ok(data) = load_rx.recv() {
+            let res = process(&data);
+            process_tx.send(res).unwrap();
+        }
+    });
+
+    let write_hanlde = thread::spawn(move || {
+        while let Ok(results) = process_rx.recv() {
+            write_results(results);
+        }
+    });
+
+    while let Some(data) = load() {
+        load_tx.send(data).unwrap();
+    }
+
+    process_hanlde.join().unwrap();
+    write_hanlde.join().unwrap();
+}
 ```
