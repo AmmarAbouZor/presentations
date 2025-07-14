@@ -673,3 +673,72 @@ fn run_with_channels() {
     write_hanlde.join().unwrap();
 }
 ```
+
+<!-- end_slide -->
+
+Avoid Bound Checks
+====
+
+<!-- alignment: center -->
+
+Rust, a memory-safe language, automatically checks bounds when we index into slices. Usually, the performance cost is tiny. However, in "hot loops" those checks can add up and affect performance.
+
+In such cases, it is possible to avoid repeated bound checks without resorting to `unsafe` code. We need to perform an implicit assertion to the highest possible index beforehand and to make indexing with cost indexes. By doing that we allow the compiler to remove those checks on subsequent accesses.
+
+<!-- new_lines: 1 -->
+
+## Example:
+
+<!-- pause -->
+
+<!-- new_lines: 1 -->
+
+<!-- column_layout: [20, 3, 20] -->
+
+<!-- column: 0 -->
+
+### Bound Checks
+
+ Bound checks will happen here on each access.
+
+```rust
+fn sum_next_three(idx: usize, nums: &[i32]) -> i32 {
+    nums[idx + 1] + nums[idx + 2] + nums[idx + 3]
+}
+```
+<!-- new_lines: 2 -->
+
+<!-- pause -->
+
+### Bound Checks & Assert & No Const
+
+Bound checks will still happen here on each access event with the assertion, because we are still not using constant indices in assertion and to access the value.
+
+```rust
+fn sum_next_three_assert_no_const(idx: usize, nums: &[i32]) -> i32 {
+    // No const values => No optimizations.
+    assert!(nums.len() > 3);
+    nums[idx + 1] + nums[idx + 2] + nums[idx + 3]
+}
+```
+
+<!-- pause -->
+
+<!-- column: 2 -->
+
+### Optimized Checks with Assertion & Const Indices
+
+We created a sub-slice here making the assertion and access with constant value.
+```rust
+fn sum_next_three_optimized(idx: usize, nums: &[i32]) -> i32 {
+    let nums = &nums[idx..];
+    // We must use const values here to activate 
+    // compiler optimizations
+    assert!(nums.len() > 3);
+    nums[1] + nums[2] + nums[3]
+}
+```
+<!-- new_lines: 2 -->
+
+### Link for generated assembly
+Here is a link for generated assembly in those cases [link](https://godbolt.org/z/TsdvTonae) 
