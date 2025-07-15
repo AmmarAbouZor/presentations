@@ -742,3 +742,14 @@ fn sum_next_three_optimized(idx: usize, nums: &[i32]) -> i32 {
 
 ### Link for generated assembly
 Here is a link for generated assembly in those cases [link](https://godbolt.org/z/TsdvTonae) 
+
+<!-- end_slide -->
+
+Branch Prediction in Processors
+====
+
+<!-- alignment: center -->
+
+Modern processors are built with a deep pipeline, meaning they try to work on several parts of an instruction at once, every single clock cycle. When the processor hits a decision point in your code—like an `if` statement—it has to guess which way the program will go. If it guesses right, the pipeline stays full and things run fast. But if it guesses wrong, it has to throw out all the work it started, wasting those cycles.
+
+# Showcase
